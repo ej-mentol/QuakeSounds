@@ -1,0 +1,9 @@
+// Quake Sounds - classnames that never get Humiliation (melee kill), i.e. 0% chance. One classname per line.
+// Read on every map start; the plugin never writes this file. Lines starting with // or # are ignored.
+//
+// Built-in chances (BuildChances() in the script): monster_headcrab 15%, monster_babycrab 15%, monster_barnacle 10%.
+// Every other classname uses CFG_MELEE_CHANCE (default 100%). An entry in this file overrides the built-in chance.
+// Other chances than 0% are set in the script: g_MeleeChance.set("classname", percent);
+//
+// Example: remove the leading // from the next line.
+// monster_zombie

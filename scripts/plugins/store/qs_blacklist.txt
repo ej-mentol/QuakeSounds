@@ -1,0 +1,12 @@
+// Quake Sounds - classnames that never build multikill / streak chains. One classname per line.
+// Read on every map start; the plugin never writes this file. Lines starting with // or # are ignored.
+//
+// Built-in list (always active, no need to repeat it here):
+//   worldspawn trigger_hurt trigger_hurt_remote trigger_multiple trigger_push
+//   func_door func_door_rotating func_train func_tracktrain func_pendulum func_rotating func_conveyor
+//   func_plat func_platrot func_wall func_wall_toggle func_breakable func_pushable func_button
+//   env_explosion env_laser env_beam env_shooter env_spark
+//
+// Entities listed here still get single-kill events (Pancake, Blast, ...), only the chain is skipped.
+// Example - stop mounted guns from chaining kills: remove the leading // from the next line.
+// func_tank

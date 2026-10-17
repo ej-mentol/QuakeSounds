@@ -1,0 +1,13 @@
+// Quake Sounds - global settings. Written by '!qs admin', read on every map start.
+// A feature is ON only if its token is listed here; a missing token means OFF.
+// Tokens: hud notify chat assist suicide lastman tips
+//   aud0 = admins only | aud1 = victim + admins | aud2 = everyone
+//   pvp0 = off | pvp1 = on | pvp2 = auto (follows mp_friendlyfire)
+// Lines starting with // or # are ignored.
+hud
+notify
+assist
+pvp2
+suicide
+lastman
+aud2

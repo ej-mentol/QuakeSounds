@@ -1,0 +1,2 @@
+// Players who already used '!qs'. They no longer receive the periodic tip (only relevant when tips are enabled).
+// One SteamID per line (netname on LAN). Maintained by the plugin. Lines starting with // or # are ignored.

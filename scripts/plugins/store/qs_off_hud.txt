@@ -1,0 +1,2 @@
+// Players who turned the big on-screen text off ('!qs hud' / '!qs 0'). One SteamID per line (netname on LAN).
+// Maintained by the plugin. Lines starting with // or # are ignored.

@@ -23,12 +23,31 @@ const int    CFG_MAX_QUEUE         = 3;         // max sounds waiting per listen
 const float  CFG_BURST_DEBOUNCE    = 0.4f;      // kills closer than this count as one burst (one announcement for the whole burst)
 const int    CFG_STREAK_MIN_KILLS  = 3;         // streak tiers below this are never announced
 const float  CFG_FLAVOR_COOLDOWN   = 5.0f;      // per-attacker cooldown: pancake/melee/headshot/assassin/blast
+const int    CFG_FLAVOR_AFTER_SHOUT_CHANCE = 50; // percent: chance that a flavor event (Humiliation, Headshot...) follows a multikill / streak / First Blood
 const bool   CFG_FLAVOR_WITH_STREAK = true;   // melee/headshot/... also play after a multikill or streak announcement (false = either/or)
 const float  CFG_FLAVOR_OFFSET     = 1.0f;      // delay of that second sound in seconds, about the length of the shout
 bool   CFG_SUICIDE_SOUND     = true;
 const float  CFG_SUICIDE_COOLDOWN  = 6.0f;      // global cooldown for suicide/world death sounds
 const int    CFG_SUICIDE_CHANCE    = 35;        // percent of suicide / world deaths that get the laugh
+const int    CFG_TEAMKILL_CHANCE   = 35;        // percent of player-kills-player events (PvP mode off) that get Teamkiller
+const float  CFG_TEAMKILL_COOLDOWN = 6.0f;      // global cooldown of Teamkiller in seconds
 const int    CFG_MELEE_CHANCE      = 100;       // default percent of melee kills that get Humiliation (per-class overrides in BuildChances)
+
+// Per-event audience: -1 = nobody, 0 = admins only, 1 = the player concerned (+ admins), 2 = everyone.
+// Effective audience = min(value, CFG_AUDIENCE), so the admin menu audience stays a ceiling.
+const int    AUD_FIRSTBLOOD        = 2;
+const int    AUD_MULTI             = 2;         // Double ... Hexa
+const int    AUD_STREAK            = 2;         // streak tiers
+const int    AUD_MELEE             = 2;         // Humiliation
+const int    AUD_PANCAKE           = 2;
+const int    AUD_HEADSHOT          = 2;
+const int    AUD_ASSASSIN          = 2;
+const int    AUD_BLAST             = 2;
+const int    AUD_SUICIDE           = 2;
+const int    AUD_TEAMKILL          = 2;
+const int    AUD_SHUTDOWN          = 2;
+const int    AUD_PAYBACK           = 1;
+const int    AUD_LASTMAN           = 2;
 bool   CFG_LASTMAN           = true;
 const int    CFG_LASTMAN_MIN_PLAYERS = 2;
 
@@ -92,6 +111,7 @@ class Ev
     string hud;
     string note;
     int slot;
+    int aud;
 }
 
 bool IsMultiTitle(const string &in t)
@@ -99,6 +119,23 @@ bool IsMultiTitle(const string &in t)
     for (uint i = 2; i < MULTI_TITLES.length(); i++)
         if (MULTI_TITLES[i] == t) return true;
     return false;
+}
+
+int AudFor(const string &in t)
+{
+    if (t == T_FIRSTBLOOD) return AUD_FIRSTBLOOD;
+    if (t == T_SUICIDE)    return AUD_SUICIDE;
+    if (t == T_TEAMKILL)   return AUD_TEAMKILL;
+    if (t == T_PANCAKE)    return AUD_PANCAKE;
+    if (t == T_MELEE)      return AUD_MELEE;
+    if (t == T_HEADSHOT)   return AUD_HEADSHOT;
+    if (t == T_ASSASSIN)   return AUD_ASSASSIN;
+    if (t == T_BLAST)      return AUD_BLAST;
+    if (t == T_SHUTDOWN)   return AUD_SHUTDOWN;
+    if (t == T_PAYBACK)    return AUD_PAYBACK;
+    if (t == T_LASTMAN)    return AUD_LASTMAN;
+    if (IsMultiTitle(t))   return AUD_MULTI;
+    return AUD_STREAK;
 }
 
 string HudText(const string &in t, const string &in a, const string &in v, const string &in x)
@@ -114,14 +151,19 @@ string HudText(const string &in t, const string &in a, const string &in v, const
     if (t == T_SHUTDOWN)   return a + " shut down " + v + "!";
     if (t == T_PAYBACK)    return a + " got Payback on " + v + "!";
     if (t == T_LASTMAN)    return a + " is the Last Man Standing!";
-    if (IsMultiTitle(t))   return a + " made a " + t + "!";
-    return a + ": " + t + "! (" + x + ")";
+    if (IsMultiTitle(t))
+    {
+        if (t == MULTI_TITLES[2]) return a + " made a " + t + "!";
+        return a + " is on a " + t + "!";
+    }
+    return a + " is on a " + t + "!";
 }
 
 Ev@ MsgVs(const string &in title, const string &in a, const string &in v, const string &in extra = "")
 {
     Ev@ e = Ev();
     e.slot = 0;
+    e.aud = AudFor(title);
     e.hud = HudText(title, a, v, extra);
     e.note = e.hud + "\n";
     return e;
@@ -131,6 +173,7 @@ Ev@ MsgSolo(const string &in title, const string &in a, const string &in extra =
 {
     Ev@ e = Ev();
     e.slot = 0;
+    e.aud = AudFor(title);
     e.hud = HudText(title, a, "", extra);
     e.note = e.hud + "\n";
     return e;
@@ -171,19 +214,19 @@ class StreakTier
 
 array<StreakTier@> g_StreakTiers = {
     StreakTier(2,  {"comboking.wav"},                         "Combo King"),
-    StreakTier(3,  {"multikill.wav", "multikill2.wav"},       "Multi Kill"),
-    StreakTier(4,  {"dominating.wav", "dominating2.wav"},     "Dominating"),
-    StreakTier(5,  {"killingspree.wav", "killingspree2.wav"}, "Killing Spree"),
-    StreakTier(6,  {"rampage.wav", "rampage2.wav"},           "Rampage"),
-    StreakTier(7,  {"megakill.wav", "megakill2.wav"},         "Mega Kill"),
-    StreakTier(8,  {"killingmachine.wav", "maniac.wav"},      "Killing Machine"),
-    StreakTier(9,  {"ultrakill.wav", "ultrakill2.wav"},       "Ultra Kill"),
-    StreakTier(10, {"unstoppable.wav", "unstoppable2.wav"},   "Unstoppable"),
-    StreakTier(11, {"monsterkill.wav", "monsterkill2.wav"},   "Monster Kill"),
-    StreakTier(12, {"whickedsick.wav", "massacre.wav"},       "Wicked Sick"),
-    StreakTier(13, {"ludicrouskill.wav", "ownage.wav"},       "Ludicrous Kill"),
-    StreakTier(14, {"godlike.wav", "godlike2.wav"},           "Godlike"),
-    StreakTier(15, {"holyshit.wav", "unreal.wav"},            "Beyond Godlike")
+    StreakTier(7,  {"multikill.wav", "multikill2.wav"},       "Multi Kill"),
+    StreakTier(8,  {"dominating.wav", "dominating2.wav"},     "Dominating"),
+    StreakTier(9,  {"killingspree.wav", "killingspree2.wav"}, "Killing Spree"),
+    StreakTier(10, {"rampage.wav", "rampage2.wav"},      "Rampage"),
+    StreakTier(11, {"megakill.wav", "megakill2.wav"},     "Mega Kill"),
+    StreakTier(12, {"killingmachine.wav", "maniac.wav"},   "Killing Machine"),
+    StreakTier(13, {"ultrakill.wav", "ultrakill2.wav"},    "Ultra Kill"),
+    StreakTier(14, {"unstoppable.wav", "unstoppable2.wav"},  "Unstoppable"),
+    StreakTier(15, {"monsterkill.wav", "monsterkill2.wav"},  "Monster Kill"),
+    StreakTier(16, {"whickedsick.wav", "massacre.wav"},    "Wicked Sick"),
+    StreakTier(17, {"ludicrouskill.wav", "ownage.wav"},    "Ludicrous Kill"),
+    StreakTier(18, {"godlike.wav", "godlike2.wav"},      "Godlike"),
+    StreakTier(19, {"holyshit.wav", "unreal.wav"},      "Beyond Godlike")
 };
 
 dictionary g_PrettyNames = {
@@ -218,10 +261,10 @@ dictionary g_PrettyNames = {
     {"monster_hwgrunt",          "Heavy Weapons Grunt"},
     {"monster_robogrunt",        "Robo Grunt"},
     {"monster_kingpin",          "Kingpin"},
-    {"func_tank",                "Mounted Gun"},
-    {"func_tanklaser",           "Mounted Laser"},
-    {"func_tankrocket",          "Mounted Rocket Launcher"},
-    {"func_tankmortar",          "Mounted Mortar"},
+    {"func_tank",                "Tank"},
+    {"func_tanklaser",           "Tank Laser"},
+    {"func_tankrocket",          "Tank Rocket"},
+    {"func_tankmortar",          "Tank Mortar"},
     {"trigger_hurt",             "the Environment"},
     {"env_explosion",            "Explosion"},
     {"env_laser",                "Laser"},
@@ -233,6 +276,7 @@ dictionary g_PrettyNames = {
 bool g_bFirstBlood = false;
 bool g_bLastManTriggered = false;
 float g_NextSuicideTime = 0.0f;
+float g_NextTeamkillTime = 0.0f;
 
 array<int>    g_LastDmgType(33, 0);
 array<float>  g_LastDmgTime(33, 0.0f);
@@ -293,6 +337,7 @@ void MapInit()
     g_bFirstBlood = false;
     g_bLastManTriggered = false;
     g_NextSuicideTime = 0.0f;
+    g_NextTeamkillTime = 0.0f;
     g_Bursts.deleteAll();
 
     PrecachePool(POOL_FIRSTBLOOD);
@@ -610,7 +655,7 @@ void SetupHud(HUDTextParams &out p, float y, int channel)
     p.fadeinTime = 0.1f;
     p.fadeoutTime = 0.6f;
     p.holdTime = 3.0f;
-    p.fxTime = 0.04f;   // seconds per letter
+    p.fxTime = 0.02f;   // seconds per letter
     p.channel = channel;
 }
 
@@ -909,15 +954,18 @@ bool DbgFor(CBasePlayer@ p)
 }
 
 // ---------------------------- SOUND ROUTING ---------------------------------
-bool ShouldPlayerReceive(CBasePlayer@ listener, CBasePlayer@ primaryTarget)
+bool ShouldPlayerReceive(CBasePlayer@ listener, CBasePlayer@ primaryTarget, int aud)
 {
     if (listener is null || !listener.IsConnected())
         return false;
 
+    if (aud < 0) return false;                   // nobody
+    if (aud > CFG_AUDIENCE) aud = CFG_AUDIENCE;  // the global audience is a ceiling
+
     bool isAdmin = (g_PlayerFuncs.AdminLevel(listener) >= ADMIN_YES);
 
-    if (CFG_AUDIENCE == 0) return isAdmin;
-    if (CFG_AUDIENCE == 1) return (isAdmin || (primaryTarget !is null && listener is primaryTarget));
+    if (aud == 0) return isAdmin;
+    if (aud == 1) return (isAdmin || (primaryTarget !is null && listener is primaryTarget));
     return true;
 }
 
@@ -977,7 +1025,7 @@ void AnnounceEvent(Ev@ ev, const string &in snd, CBasePlayer@ primaryTarget)
     for (int i = 1; i <= g_Engine.maxClients; i++)
     {
         CBasePlayer@ listener = g_PlayerFuncs.FindPlayerByIndex(i);
-        if (!ShouldPlayerReceive(listener, primaryTarget))
+        if (!ShouldPlayerReceive(listener, primaryTarget, ev.aud))
             continue;
 
         int64 off = PrefMask(listener);
@@ -1352,6 +1400,13 @@ void FlushBurst(string key)
 
     if (!b.fTitle.IsEmpty() && (!streakSpoke || CFG_FLAVOR_WITH_STREAK))
     {
+        if (streakSpoke && !Roll(CFG_FLAVOR_AFTER_SHOUT_CHANCE))
+        {
+            if (CFG_DEBUG)
+                DebugLog("flavor " + b.fTitle + " skipped after shout (chance " + string(CFG_FLAVOR_AFTER_SHOUT_CHANCE) + "%)");
+            return;
+        }
+
         CBaseEntity@ atkEnt = b.hAtk.GetEntity();
         if (atkEnt !is null && FlavorReady(atkEnt))
         {
@@ -1430,8 +1485,16 @@ HookReturnCode OnPlayerKilled(CBasePlayer@ victim, CBaseEntity@ atk, int iGib)
     }
     else if (atk.IsPlayer() && !PvpActive())
     {
-        if (!announced)
-            AnnounceEvent(MsgVs(T_TEAMKILL, atkName, victimName), PickRandomSound(POOL_TEAMKILL), victim);
+        if (!announced && g_Engine.time >= g_NextTeamkillTime)
+        {
+            if (Roll(CFG_TEAMKILL_CHANCE))
+            {
+                g_NextTeamkillTime = g_Engine.time + CFG_TEAMKILL_COOLDOWN;
+                AnnounceEvent(MsgVs(T_TEAMKILL, atkName, victimName), PickRandomSound(POOL_TEAMKILL), victim);
+            }
+            else if (CFG_DEBUG)
+                DebugLog("teamkill skipped (chance " + string(CFG_TEAMKILL_CHANCE) + "%)");
+        }
     }
     else
     {

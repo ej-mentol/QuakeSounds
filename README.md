@@ -10,15 +10,14 @@ mentol - https://github.com/ej-mentol/
 
 ## Credits
 
-Event set, sound names and general behaviour are based on
-[Advanced Quake Sounds v5.0 [ALL GAMES] & Optional Sounds Pack](https://forums.alliedmods.net/showthread.php?t=152034)
-(AlliedModders, AMX Mod X). The sound files are taken from the Optional Sounds Pack of that project.
-Check the original thread for the distribution terms of the sounds.
+- Concept, event set and sound names: [Advanced Quake Sounds](https://forums.alliedmods.net/showthread.php?t=152034) (AlliedModders, AMX Mod X).
+  The sound files in `sound/quake_sounds/` come from its Optional Sounds Pack and are kept in this repository so they stay available if the forum link dies.
+- On-screen presentation (typewriter HUD text, announcement phrasing such as "drew the First Blood!"): modelled on the announcer of [GameSwitch](https://gameswitch.org) servers.
 
 ## Requirements
 
 - Sven Co-op with AngelScript plugin support. The script was written against the 5.26 API documentation.
-- Sound files in `sound/quake_sounds/` (list below). The plugin precaches them; clients download them on connect.
+- Sound files in `sound/quake_sounds/`, included in this repository (list at the end, source in Credits). The plugin precaches them; clients download them on connect.
 
 ## Installation
 
@@ -47,7 +46,7 @@ Updating: do not overwrite `store/qs_off_*.txt` and `store/qs_seen.txt` on a run
 |---|---|
 | First Blood | First death on the map, any killer. Once per map. |
 | Double / Triple / Quadra / Penta / Hexa Kill | Consecutive kills by the same killer (2 to 6 in a chain). |
-| Streak tiers (Multi Kill ... Beyond Godlike) | Total kills of one killer reach 3, 4, ... 15 (`CFG_STREAK_MIN_KILLS` and up). |
+| Streak tiers (Multi Kill ... Beyond Godlike) | Total kills of one killer reach 7, 8, ... 19, continuing after Hexa Kill. |
 | Humiliation | Victim killed by a direct melee attack (slash / club damage, inflictor is the attacker). |
 | Pancake | Crush damage or killed by a door, train, pendulum, rotating brush. |
 | Headshot | Victim's last hit group is the head. |
@@ -80,6 +79,30 @@ Each of them has a per-killer cooldown (`CFG_FLAVOR_COOLDOWN`).
 - **Admin assist.** When a barrel or explosive kills a player and a player recently damaged it, admins get a line
   `shooter -> source -> victim` in the kill feed, with a distance tag. Switchable.
 
+## Configuration layers
+
+Where to change what, in the order to decide:
+
+1. **`store/` files** - no script edit, read on every map start.
+   - `qs_config.txt`: server-wide switches (big text, kill feed, chat, admin assist, suicide laugh, last man, tips), global audience, PvP mode.
+   - `qs_blacklist.txt`, `qs_melee_blacklist.txt`: classnames excluded from chains / from Humiliation.
+   - `qs_off_snd.txt`, `qs_off_hud.txt`, `qs_off_feed.txt`: per-player mutes, written by `!qs`.
+2. **Script constants** - audience per event type (`AUD_*`), timings, chances, thresholds, HUD position.
+3. **Script code** - event classification and priorities (`OnPlayerKilled`).
+
+Who receives an event is decided per listener in three steps:
+
+| Step | Source | Meaning |
+|---|---|---|
+| 1 | `AUD_*` of the event type (script constants) | -1 nobody, 0 admins only, 1 the player concerned (+ admins), 2 everyone |
+| 2 | Global audience: `aud0/1/2` in `qs_config.txt` or `!qs admin` | Ceiling. The effective value is the smaller of step 1 and step 2. |
+| 3 | Player's own settings: `!qs snd/hud/feed/0`, stored in `qs_off_*.txt` | The listener's mute, applied after steps 1 and 2. Sound, big text and kill feed are muted separately. |
+
+- Steps 1 and 2 apply to sound, big text, kill feed and chat line of an event together. Only step 3 can separate sound from text.
+- Global switches (`hud`, `notify`, `chat` in `qs_config.txt`) turn an output off for everyone, regardless of the steps above.
+- "The player concerned" is the victim for events where a monster kills a player (First Blood, multikills, streaks, Humiliation and the other flavor events, suicide, Teamkiller), the killing player for Shutdown and Payback, and the survivor for Last Man Standing.
+- In PvP mode the victim, not the killer, counts as the player concerned. Keep `AUD_*` at 2 there.
+
 ## Player commands
 
 | Command | Effect |
@@ -99,7 +122,8 @@ Each of them has a per-killer cooldown (`CFG_FLAVOR_COOLDOWN`).
 | Everything | one player | `!qs 0` |
 | Sounds, big text, kill feed | one player | `!qs snd`, `!qs hud`, `!qs feed` (saved in `qs_off_snd.txt`, `qs_off_hud.txt`, `qs_off_feed.txt`) |
 | Big text, kill feed, chat lines, admin assist, suicide laugh, last man, tips | server | remove the token from `qs_config.txt` or use `!qs admin` |
-| Who hears events (admins / victim + admins / everyone) | server | `aud0` / `aud1` / `aud2` in `qs_config.txt` |
+| Who hears events, all events at once (admins / victim + admins / everyone) | server | `aud0` / `aud1` / `aud2` in `qs_config.txt` |
+| Who hears one event type | server | `AUD_*` constants in the script, see Configuration layers |
 | PvP behaviour | server | `pvp0` / `pvp1` / `pvp2` in `qs_config.txt` |
 | Chains and streaks for specific classnames | server | `qs_blacklist.txt` |
 | Humiliation for specific classnames | server | `qs_melee_blacklist.txt` |
@@ -133,11 +157,14 @@ Edit the constants at the top of `quake_sounds.as`.
 | `CFG_MAX_QUEUE` | 3 | Maximum queued sounds per listener |
 | `CFG_BURST_DEBOUNCE` | 0.4 | Seconds that merge kills of different victims into one announcement |
 | `CFG_STREAK_MIN_KILLS` | 3 | Streak tiers below this are not announced |
+| `AUD_*` (13 constants) | 2 (`AUD_PAYBACK` 1) | Audience per event type: -1 nobody, 0 admins only, 1 the player concerned (+ admins), 2 everyone. The effective audience is the smaller of this value and the global audience (`aud0/1/2`, `!qs admin`). |
 | `CFG_FLAVOR_COOLDOWN` | 5.0 | Per-killer cooldown of Humiliation / Pancake / Headshot / Assassin / Blast |
 | `CFG_FLAVOR_WITH_STREAK` | true | Play a flavor event after a multikill / streak (false: either one) |
+| `CFG_FLAVOR_AFTER_SHOUT_CHANCE` | 50 | Percent chance that a flavor event follows a multikill / streak / First Blood (a flavor event without a preceding shout is not affected) |
 | `CFG_FLAVOR_OFFSET` | 1.0 | Delay of that flavor event in seconds, roughly the length of the multikill sound |
 | `CFG_SUICIDE_CHANCE` | 35 | Percent of suicide / world deaths that play the laugh |
 | `CFG_SUICIDE_COOLDOWN` | 6.0 | Global cooldown of the laugh in seconds |
+| `CFG_TEAMKILL_CHANCE`, `CFG_TEAMKILL_COOLDOWN` | 35, 6.0 | Percent of player-kills-player events that get Teamkiller while PvP mode is off, and the global cooldown of that sound in seconds |
 | `CFG_MELEE_CHANCE` | 100 | Default percent of melee kills that play Humiliation; per-class values in `BuildChances()` (headcrab 15, babycrab 15, barnacle 10) |
 | `MULTIKILL_WINDOW` | 3.5 | Chain gap limit for player killers, seconds |
 | `SHUTDOWN_MIN_KILLS` | 3 | Minimum monster kills for Shutdown |
@@ -164,7 +191,7 @@ It also enables `!qs test`, which prints the current settings and sends one test
 
 ## Required sound files
 
-`sound/quake_sounds/`
+Included in `sound/quake_sounds/` of this repository (source in Credits). The script expects these file names:
 
 ```
 assassin.wav

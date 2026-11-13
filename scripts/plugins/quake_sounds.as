@@ -265,11 +265,11 @@ dictionary g_PrettyNames = {
     {"func_tanklaser",           "Tank Laser"},
     {"func_tankrocket",          "Tank Rocket"},
     {"func_tankmortar",          "Tank Mortar"},
-    {"trigger_hurt",             "the Environment"},
+    {"trigger_hurt",             "Environment"},
     {"env_explosion",            "Explosion"},
     {"env_laser",                "Laser"},
     {"env_beam",                 "Beam"},
-    {"worldspawn",               "world"}
+    {"worldspawn",               "World"}
 };
 
 // ---------------------------- STATE -----------------------------------------
@@ -488,8 +488,7 @@ void LoadPrefs()
     if (hadLegacy)
     {
         SavePrefs();
-        File@ t = g_FileSystem.OpenFile(F_LEGACY, OpenFile::WRITE);
-        if (t !is null && t.IsOpen()) t.Close();
+        g_FileSystem.RemoveFile(F_LEGACY);
     }
 }
 
@@ -649,7 +648,7 @@ void SetupHud(HUDTextParams &out p, float y, int channel)
 {
     p.x = HUD_X;
     p.y = y;
-    p.effect = 2;   // typewriter: each new letter flashes in color 2, then settles to color 1
+    p.effect = HUD_EFFECT_RAMP_DOWN;   // = 2: each new letter starts in color 2 and ramps down to color 1
     p.r1 = 64;  p.g1 = 160; p.b1 = 255; p.a1 = 255;
     p.r2 = 255; p.g2 = 255; p.b2 = 250; p.a2 = 255;
     p.fadeinTime = 0.1f;
@@ -1147,7 +1146,7 @@ CBasePlayer@ ResolvePlayer(CBaseEntity@ e)
 // ---------------------------- GREY-ZONE ASSIST (admins) ---------------------
 HookReturnCode OnWeaponFire(CBasePlayer@ pPlayer, CBasePlayerWeapon@ pWeapon)
 {
-    if (pPlayer is null) return HOOK_CONTINUE;
+    if (pPlayer is null || !CFG_ASSIST) return HOOK_CONTINUE;
 
     Math.MakeVectors(pPlayer.pev.v_angle);
     Vector vecSrc = pPlayer.GetGunPosition();
@@ -1264,7 +1263,7 @@ bool FlavorReady(CBaseEntity@ atk)
 
 void CheckLastManStanding(CBasePlayer@ dying)
 {
-    if (!CFG_LASTMAN || g_bLastManTriggered) return;
+    if (!CFG_LASTMAN) return;
 
     int totalConnected = 0;
     int totalAlive = 0;
@@ -1284,14 +1283,14 @@ void CheckLastManStanding(CBasePlayer@ dying)
         }
     }
 
-    if (totalConnected >= CFG_LASTMAN_MIN_PLAYERS && totalAlive == 1 && lastSurvivor !is null)
+    // re-arm once there are several survivors again (the flag would otherwise stay set after a wipe)
+    if (totalAlive >= CFG_LASTMAN_MIN_PLAYERS)
+        g_bLastManTriggered = false;
+
+    if (!g_bLastManTriggered && totalConnected >= CFG_LASTMAN_MIN_PLAYERS && totalAlive == 1 && lastSurvivor !is null)
     {
         g_bLastManTriggered = true;
         AnnounceEvent(MsgSolo(T_LASTMAN, string(lastSurvivor.pev.netname)), PickRandomSound(POOL_LASTMAN), lastSurvivor);
-    }
-    else if (totalAlive > 1)
-    {
-        g_bLastManTriggered = false;
     }
 }
 
@@ -1463,7 +1462,7 @@ HookReturnCode OnPlayerKilled(CBasePlayer@ victim, CBaseEntity@ atk, int iGib)
     // one sound per death: first blood takes priority over flavor / suicide sounds
     bool announced = false;
 
-    if (!g_bFirstBlood)
+    if (!g_bFirstBlood && !isSelfOrWorld)   // pits, falls and suicides do not take first blood
     {
         g_bFirstBlood = true;
         announced = true;
@@ -1472,6 +1471,15 @@ HookReturnCode OnPlayerKilled(CBasePlayer@ victim, CBaseEntity@ atk, int iGib)
 
     if (isSelfOrWorld)
     {
+        if (CFG_DEBUG)
+        {
+            string ac = "null";
+            if (atk !is null) ac = atk.GetClassname();
+            string ic = "none";
+            if (infl !is null) ic = infl.GetClassname();
+            DebugLog("suicide path: " + victimName + ", attacker " + ac + ", inflictor " + ic + ", damage bits " + string(dmgBits));
+        }
+
         if (!announced && CFG_SUICIDE_SOUND && g_Engine.time >= g_NextSuicideTime)
         {
             if (Roll(CFG_SUICIDE_CHANCE))
@@ -1520,7 +1528,7 @@ HookReturnCode OnPlayerKilled(CBasePlayer@ victim, CBaseEntity@ atk, int iGib)
             else if (CFG_DEBUG)
                 DebugLog("melee skipped for " + atk.GetClassname() + " (chance " + string(chance) + "%)");
         }
-        else if (victim.m_LastHitGroup == HITGROUP_HEAD)
+        else if (victim.m_LastHitGroup == HITGROUP_HEAD && (dmgBits & DMG_BLAST) == 0)
         {
             fTitle = T_HEADSHOT;
             fSnd = PickRandomSound(POOL_HEADSHOT);
